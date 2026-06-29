@@ -7,6 +7,10 @@
     {
       "source": "/uploads/:path*",
       "destination": "https://stayease-airbnb-clone-lv17.onrender.com/uploads/:path*"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
     }
   ]
 }
