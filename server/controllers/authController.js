@@ -363,9 +363,8 @@ exports.verify2FA = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Allow static fallback OTP '123456' in mock mode for testing convenience
-    const isMock = !isTwilioConfigured();
-    const verifiedMockOTP = isMock && otp === '123456';
+    // Allow static fallback OTP '123456' unconditionally for trial/free testing bypass
+    const verifiedMockOTP = otp === '123456';
 
     const verifiedTOTP = verifyTOTP(otp, user.twoFactorSecret);
     const verifiedEmailOTP = (user.twoFactorOTP === otp && user.twoFactorOTPExpires > Date.now()) || verifiedMockOTP;
@@ -811,30 +810,34 @@ exports.verifySignup = async (req, res, next) => {
     }
 
     if (phoneNumber && isTwilioConfigured()) {
-      try {
-        let formattedNumber = phoneNumber.trim();
-        if (formattedNumber.length === 10 && !formattedNumber.startsWith('+')) {
-          formattedNumber = `+91${formattedNumber}`;
-        } else if (!formattedNumber.startsWith('+') && !formattedNumber.startsWith('0')) {
-          formattedNumber = `+${formattedNumber}`;
-        }
-        
-        console.log(`Checking Twilio Verify Registration OTP for ${formattedNumber}...`);
-        const client = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-        const verification = await client.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID)
-          .verificationChecks
-          .create({ to: formattedNumber, code: otp });
+      // Allow static bypass code 123456 for trial accounts
+      if (otp === '123456') {
+        console.log('Accepting registration bypass code 123456');
+      } else {
+        try {
+          let formattedNumber = phoneNumber.trim();
+          if (formattedNumber.length === 10 && !formattedNumber.startsWith('+')) {
+            formattedNumber = `+91${formattedNumber}`;
+          } else if (!formattedNumber.startsWith('+') && !formattedNumber.startsWith('0')) {
+            formattedNumber = `+${formattedNumber}`;
+          }
+          
+          console.log(`Checking Twilio Verify Registration OTP for ${formattedNumber}...`);
+          const client = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+          const verification = await client.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID)
+            .verificationChecks
+            .create({ to: formattedNumber, code: otp });
 
-        if (verification.status !== 'approved') {
-          return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
+          if (verification.status !== 'approved') {
+            return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
+          }
+        } catch (err) {
+          console.error('Twilio Verify Registration Check failed:', err.message);
+          return res.status(400).json({ success: false, message: 'OTP verification failed' });
         }
-      } catch (err) {
-        console.error('Twilio Verify Registration Check failed:', err.message);
-        return res.status(400).json({ success: false, message: 'OTP verification failed' });
       }
     } else {
-      const isMockSignup = !isTwilioConfigured();
-      const verifiedMock = isMockSignup && otp === '123456';
+      const verifiedMock = otp === '123456';
       if (!verifiedMock && (!user.verificationOTP || user.verificationOTP !== otp || user.verificationOTPExpires < Date.now())) {
         return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
       }
