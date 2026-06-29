@@ -24,6 +24,9 @@ const sendEmail = async (options) => {
         host: 'smtp.ethereal.email',
         port: 587,
         secure: false,
+        connectionTimeout: 5000, // 5 seconds connection timeout
+        greetingTimeout: 5000,   // 5 seconds greeting timeout
+        socketTimeout: 5000,     // 5 seconds socket timeout
         auth: {
           user: testAccount.user,
           pass: testAccount.pass,
@@ -43,6 +46,9 @@ const sendEmail = async (options) => {
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: process.env.SMTP_PORT,
+      connectionTimeout: 5000, // 5 seconds connection timeout
+      greetingTimeout: 5000,   // 5 seconds greeting timeout
+      socketTimeout: 5000,     // 5 seconds socket timeout
       auth: {
         user: process.env.SMTP_EMAIL,
         pass: process.env.SMTP_PASSWORD,
