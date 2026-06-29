@@ -1,6 +1,39 @@
 const nodemailer = require('nodemailer');
 
 const sendEmail = async (options) => {
+  // If RESEND_API_KEY is configured, use Resend HTTP API (bypasses Render SMTP port blocks)
+  if (process.env.RESEND_API_KEY) {
+    console.log('Attempting to send email via Resend HTTP API...');
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
+        },
+        body: JSON.stringify({
+          from: 'StayEase <onboarding@resend.dev>',
+          to: options.email,
+          subject: options.subject,
+          text: options.message,
+          html: options.html || `<p>${options.message}</p>`
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        console.log(`Email sent successfully via Resend. Message ID: ${data.id}`);
+        return { success: true, messageId: data.id };
+      } else {
+        console.error('Resend API returned an error:', data);
+        throw new Error(data.message || 'Resend transmission failed');
+      }
+    } catch (err) {
+      console.error('Failed to send email via Resend API, falling back...', err.message);
+      // Fall through to nodemailer SMTP/Mock options
+    }
+  }
+
   let transporter;
   let fromEmail = 'noreply@stayease.com';
   let fromName = 'StayEase Support';
