@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://stayease-backend-verma.onrender.com/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://stayease-backend-verma.onrender.com/uploads/:path*"
+    }
+  ]
+}
