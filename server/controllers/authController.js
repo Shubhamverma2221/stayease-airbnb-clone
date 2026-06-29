@@ -5,6 +5,18 @@ const uploadImage = require('../utils/uploadImage');
 const jwt = require('jsonwebtoken');
 const Session = require('../models/Session');
 
+const isTwilioConfigured = () => {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const serviceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
+  
+  return (
+    sid && !sid.includes('your_') && !sid.includes('placeholder') &&
+    token && !token.includes('your_') && !token.includes('placeholder') &&
+    serviceSid && !serviceSid.includes('your_') && !serviceSid.includes('placeholder')
+  );
+};
+
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'fallback_jwt_secret_123_abc', {
     expiresIn: '30d',
@@ -180,7 +192,7 @@ exports.register = async (req, res, next) => {
     }
     
     if (user.phoneNumber) {
-      if (process.env.TWILIO_VERIFY_SERVICE_SID) {
+      if (isTwilioConfigured()) {
         try {
           let formattedNumber = user.phoneNumber.trim();
           if (formattedNumber.length === 10 && !formattedNumber.startsWith('+')) {
@@ -197,6 +209,7 @@ exports.register = async (req, res, next) => {
           console.error('Twilio Verify Registration OTP failed:', err.message);
         }
       } else {
+        console.log(`[MOCK PHONE OTP] Registration OTP for ${user.phoneNumber} is: ${verificationOTP}`);
         try {
           await sendSMS(
             user.phoneNumber,
@@ -291,7 +304,7 @@ exports.login = async (req, res, next) => {
         console.error('2FA Email send failure:', err);
       }
     } else if (targetChannel === 'sms' && hasPhone) {
-      if (process.env.TWILIO_VERIFY_SERVICE_SID) {
+      if (isTwilioConfigured()) {
         try {
           let formattedNumber = user.phoneNumber.trim();
           if (formattedNumber.length === 10 && !formattedNumber.startsWith('+')) {
@@ -308,6 +321,7 @@ exports.login = async (req, res, next) => {
           console.error('Twilio Verify Login OTP failed:', err.message);
         }
       } else {
+        console.log(`[MOCK PHONE OTP] Login OTP for ${user.phoneNumber} is: ${twoFactorOTP}`);
         try {
           await sendSMS(
             user.phoneNumber,
@@ -353,7 +367,7 @@ exports.verify2FA = async (req, res, next) => {
     const verifiedEmailOTP = user.twoFactorOTP === otp && user.twoFactorOTPExpires > Date.now();
     let verifiedSMSOTP = false;
 
-    if (user.phoneNumber && process.env.TWILIO_VERIFY_SERVICE_SID) {
+    if (user.phoneNumber && isTwilioConfigured()) {
       try {
         let formattedNumber = user.phoneNumber.trim();
         if (formattedNumber.length === 10 && !formattedNumber.startsWith('+')) {
@@ -374,6 +388,9 @@ exports.verify2FA = async (req, res, next) => {
       } catch (err) {
         console.error('Twilio login verification check failed:', err.message);
       }
+    } else if (user.phoneNumber) {
+      // Fallback for mock SMS OTP check
+      verifiedSMSOTP = user.twoFactorOTP === otp && user.twoFactorOTPExpires > Date.now();
     }
 
     if (!verifiedTOTP && !verifiedEmailOTP && !verifiedSMSOTP) {
@@ -547,7 +564,7 @@ exports.forgotPassword = async (req, res, next) => {
         return res.status(500).json({ success: false, message: 'Email could not be sent' });
       }
     } else if (phoneNumber && user.phoneNumber) {
-      if (process.env.TWILIO_VERIFY_SERVICE_SID) {
+      if (isTwilioConfigured()) {
         try {
           let formattedNumber = phoneNumber.trim();
           if (formattedNumber.length === 10 && !formattedNumber.startsWith('+')) {
@@ -568,6 +585,7 @@ exports.forgotPassword = async (req, res, next) => {
           return res.status(500).json({ success: false, message: 'Twilio Verify OTP could not be sent' });
         }
       } else {
+        console.log(`[MOCK PHONE OTP] Forgot Password OTP for ${user.phoneNumber} is: ${resetOTP}`);
         try {
           await sendSMS(
             user.phoneNumber,
@@ -616,7 +634,7 @@ exports.resetPassword = async (req, res, next) => {
         return res.status(404).json({ success: false, message: 'No user registered with this phone number' });
       }
 
-      if (process.env.TWILIO_VERIFY_SERVICE_SID) {
+      if (isTwilioConfigured()) {
         try {
           let formattedNumber = phoneNumber.trim();
           if (formattedNumber.length === 10 && !formattedNumber.startsWith('+')) {
@@ -788,7 +806,7 @@ exports.verifySignup = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    if (phoneNumber && process.env.TWILIO_VERIFY_SERVICE_SID) {
+    if (phoneNumber && isTwilioConfigured()) {
       try {
         let formattedNumber = phoneNumber.trim();
         if (formattedNumber.length === 10 && !formattedNumber.startsWith('+')) {
@@ -820,6 +838,59 @@ exports.verifySignup = async (req, res, next) => {
     user.verificationOTP = undefined;
     user.verificationOTPExpires = undefined;
     await user.save();
+
+    // Send Onboarding/Welcome Email with detailed guides
+    if (user.email) {
+      try {
+        await sendEmail({
+          email: user.email,
+          subject: 'Welcome to StayEase - Your Premium Travel Journey Begins!',
+          message: `Hello ${user.name},\n\nYour account has been verified successfully!\n\nWelcome to StayEase. Here are your account details and platform guides:\n- Support Email: shubhamshivi2004@gmail.com\n- Support Hotline: 9793768977\n\nSafe travels!\nStayEase Team`,
+          html: `<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; border: 1px solid #e0e0e0; border-radius: 12px; max-width: 600px; margin: 0 auto; color: #333;">
+            <div style="text-align: center; border-bottom: 2px solid #FF385C; padding-bottom: 20px; margin-bottom: 25px;">
+              <h1 style="color: #FF385C; margin: 0; font-size: 28px;">StayEase</h1>
+              <p style="color: #777; margin: 5px 0 0 0; font-size: 14px;">Your Premium Travel Ecosystem</p>
+            </div>
+            
+            <h2 style="color: #333; margin-top: 0;">Account Verified Successfully! 🎉</h2>
+            <p>Hello <strong>${user.name}</strong>,</p>
+            <p>We are excited to let you know that your email has been verified. Your StayEase account is now fully active, and you are ready to begin your premium travel journey.</p>
+            
+            <div style="background-color: #f7f9fa; padding: 20px; border-radius: 10px; margin: 25px 0; border-left: 4px solid #FF385C;">
+              <h3 style="margin-top: 0; color: #333; font-size: 16px;">🚀 Quick Start Guide</h3>
+              <ul style="padding-left: 20px; margin-bottom: 0; color: #555;">
+                <li style="margin-bottom: 8px;"><strong>AI Travel Concierge:</strong> Chat with our AI travel chatbot on the homepage to find properties, recommend attractions, or map out custom 3-day trip itineraries.</li>
+                <li style="margin-bottom: 8px;"><strong>360° VR Tours:</strong> Inspect any room virtual layout directly on property detail cards at 120 FPS before booking.</li>
+                <li style="margin-bottom: 8px;"><strong>Active Security Hub:</strong> Track, audit, or remotely revoke other active login sessions directly from your Profile settings card.</li>
+                <li style="margin-bottom: 0;"><strong>Become a Host:</strong> List your own properties, configure availability, and manage dynamic calendar pricing.</li>
+              </ul>
+            </div>
+            
+            <div style="border-top: 1px solid #eee; padding-top: 20px; margin-top: 25px;">
+              <h3 style="margin-top: 0; color: #333; font-size: 16px;">📞 StayEase Support Details</h3>
+              <p style="margin: 5px 0; color: #555;">Need help? Our 24/7 client care team is always here for you:</p>
+              <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                <tr>
+                  <td style="padding: 5px 0; font-weight: bold; color: #333; width: 120px;">Email Support:</td>
+                  <td style="padding: 5px 0; color: #FF385C;"><a href="mailto:shubhamshivi2004@gmail.com" style="color: #FF385C; text-decoration: none;">shubhamshivi2004@gmail.com</a></td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0; font-weight: bold; color: #333;">Hotline Support:</td>
+                  <td style="padding: 5px 0; color: #555;"><a href="tel:+919793768977" style="color: #333; text-decoration: none;">+91 9793768977</a></td>
+                </tr>
+              </table>
+            </div>
+            
+            <p style="margin-top: 30px; margin-bottom: 0; font-size: 14px; color: #888; text-align: center;">
+              Thank you for choosing StayEase. We wish you wonderful travels ahead!<br/>
+              <strong>StayEase Inc.</strong>
+            </p>
+          </div>`
+        });
+      } catch (err) {
+        console.error('Welcome onboarding email sending failed:', err.message);
+      }
+    }
 
     await sendTokenResponse(user, 200, req, res);
   } catch (error) {
@@ -874,7 +945,7 @@ exports.resendSignupOTP = async (req, res, next) => {
     }
 
     if (user.phoneNumber && phoneNumber) {
-      if (process.env.TWILIO_VERIFY_SERVICE_SID) {
+      if (isTwilioConfigured()) {
         try {
           let formattedNumber = user.phoneNumber.trim();
           if (formattedNumber.length === 10 && !formattedNumber.startsWith('+')) {
@@ -891,6 +962,7 @@ exports.resendSignupOTP = async (req, res, next) => {
           console.error('Twilio Verify Registration OTP resend failed:', err.message);
         }
       } else {
+        console.log(`[MOCK PHONE OTP] Resent Registration OTP for ${user.phoneNumber} is: ${verificationOTP}`);
         try {
           await sendSMS(
             user.phoneNumber,
