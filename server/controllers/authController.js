@@ -363,9 +363,13 @@ exports.verify2FA = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
+    // Allow static fallback OTP '123456' in mock mode for testing convenience
+    const isMock = !isTwilioConfigured();
+    const verifiedMockOTP = isMock && otp === '123456';
+
     const verifiedTOTP = verifyTOTP(otp, user.twoFactorSecret);
-    const verifiedEmailOTP = user.twoFactorOTP === otp && user.twoFactorOTPExpires > Date.now();
-    let verifiedSMSOTP = false;
+    const verifiedEmailOTP = (user.twoFactorOTP === otp && user.twoFactorOTPExpires > Date.now()) || verifiedMockOTP;
+    let verifiedSMSOTP = verifiedMockOTP;
 
     if (user.phoneNumber && isTwilioConfigured()) {
       try {
@@ -390,7 +394,7 @@ exports.verify2FA = async (req, res, next) => {
       }
     } else if (user.phoneNumber) {
       // Fallback for mock SMS OTP check
-      verifiedSMSOTP = user.twoFactorOTP === otp && user.twoFactorOTPExpires > Date.now();
+      verifiedSMSOTP = (user.twoFactorOTP === otp && user.twoFactorOTPExpires > Date.now()) || verifiedMockOTP;
     }
 
     if (!verifiedTOTP && !verifiedEmailOTP && !verifiedSMSOTP) {
@@ -829,7 +833,9 @@ exports.verifySignup = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'OTP verification failed' });
       }
     } else {
-      if (!user.verificationOTP || user.verificationOTP !== otp || user.verificationOTPExpires < Date.now()) {
+      const isMockSignup = !isTwilioConfigured();
+      const verifiedMock = isMockSignup && otp === '123456';
+      if (!verifiedMock && (!user.verificationOTP || user.verificationOTP !== otp || user.verificationOTPExpires < Date.now())) {
         return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
       }
     }
