@@ -5,8 +5,18 @@ const sendEmail = async (options) => {
   let fromEmail = 'noreply@stayease.com';
   let fromName = 'StayEase Support';
 
-  // If local environment credentials are missing, generate an Ethereal SMTP test account on the fly
+  // If local environment credentials are missing, configure test or mock mailer
   if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_EMAIL || !process.env.SMTP_PASSWORD) {
+    const isProd = process.env.NODE_ENV === 'production';
+    if (isProd) {
+      console.log('====== MOCK EMAIL SERVICE (PRODUCTION FALLBACK) ======');
+      console.log(`To: ${options.email}`);
+      console.log(`Subject: ${options.subject}`);
+      console.log(`Body: ${options.message}`);
+      console.log('======================================================');
+      return { success: true, mock: true };
+    }
+
     console.log('Configuring temporary Ethereal SMTP account for developer visual preview...');
     try {
       const testAccount = await nodemailer.createTestAccount();
