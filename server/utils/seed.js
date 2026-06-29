@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Property = require('../models/Property');
-require('dotenv').config({ path: '../.env' }); // load dotenv from server directory
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') }); // load dotenv from server directory
 
 const mockProperties = (hostId) => {
   const categoriesList = ['Trending', 'Beachfront', 'Cabins', 'Countryside', 'Pools', 'Lakefront', 'Modern', 'Castles', 'Islands', 'Design'];
